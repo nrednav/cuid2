@@ -32,11 +32,9 @@ type Config struct {
 
 type Option func(*Config) error
 
-// Initializes the config of the Cuid2 generator with either default or
-// user-defined values for the options
+// Initializes the Cuid2 generator with default or user-defined config options
 //
-// Returns a function that can be called to generate Cuids using the initialized
-// config
+// Returns a function that can be called to generate Cuids using the initialized config
 func Init(options ...Option) (func() string, error) {
 	config := &Config{
 		randomFunc:     rand.Float64,
@@ -68,7 +66,7 @@ func Init(options ...Option) (func() string, error) {
 // Generates Cuids using default config options
 var Generate, _ = Init()
 
-// IsCuid checks whether a given Cuid has a valid form and length
+// Checks whether a given Cuid has a valid form and length
 func IsCuid(id string) bool {
 	length := len(id)
 	idMatchesRegex, _ := regexp.MatchString("^[0-9a-z]+$", id)
@@ -97,7 +95,7 @@ func WithSessionCounter(sessionCounter func() int64) Option {
 	}
 }
 
-// Configures the length of the generated cuid
+// Configures the length of the generated Cuid
 //
 // Max Length = 32
 // Min Length = 2
