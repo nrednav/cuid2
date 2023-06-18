@@ -15,11 +15,12 @@ import (
 )
 
 const (
-	defaultIdLength int = 24
-	maxIdLength     int = 32
+	DefaultIdLength int = 24
+	MinIdLength     int = 2
+	MaxIdLength     int = 32
 
 	// ~22k hosts before 50% chance of initial counter collision
-	maxSessionCount int32 = 476782367
+	MaxSessionCount int64 = 476782367
 )
 
 type Config struct {
@@ -39,9 +40,9 @@ type Option func(*Config) error
 func Init(options ...Option) (func() string, error) {
 	config := &Config{
 		randomFunc:     rand.Float64,
-		sessionCounter: createCounter(int64(math.Floor(rand.Float64() * float64(maxSessionCount)))),
-		length:         defaultIdLength,
-		fingerprint:    createFingerprint(rand.Float64),
+		sessionCounter: createCounter(int64(math.Floor(rand.Float64() * float64(MaxSessionCount)))),
+		length:         DefaultIdLength,
+		fingerprint:    createFingerprint(rand.Float64, getEnvironmentKeyString()),
 	}
 
 	for _, option := range options {
@@ -72,7 +73,7 @@ func IsCuid(id string) bool {
 	length := len(id)
 	idMatchesRegex, _ := regexp.MatchString("^[0-9a-z]+$", id)
 
-	if idMatchesRegex && length >= 2 && length <= maxIdLength {
+	if idMatchesRegex && length >= MinIdLength && length <= MaxIdLength {
 		return true
 	}
 
@@ -99,9 +100,10 @@ func WithSessionCounter(sessionCounter func() int64) Option {
 // Configures the length of the generated cuid
 //
 // Max Length = 32
+// Min Length = 2
 func WithLength(length int) Option {
 	return func(c *Config) error {
-		if length > maxIdLength {
+		if length > MaxIdLength {
 			return fmt.Errorf("Error: Can only generate id's with a max length of %v", length)
 		}
 		c.length = length
@@ -121,14 +123,13 @@ func WithFingerprint(fingerprint string) Option {
 func createCounter(initialCount int64) func() int64 {
 	return func() int64 {
 		initialCount++
-		return initialCount
+		return initialCount - 1
 	}
 }
 
-func createFingerprint(func() float64) string {
-	sourceString := createEntropy(maxIdLength, rand.Float64)
+func createFingerprint(randomFunc func() float64, envKeyString string) string {
+	sourceString := createEntropy(MaxIdLength, randomFunc)
 
-	envKeyString := getEnvironmentKeyString()
 	if len(envKeyString) > 0 {
 		sourceString += envKeyString
 	}
