@@ -1,12 +1,10 @@
 # Cuid2
 
-> This is a port of the JavaScript library [@paralleldrive/cuid2](https://github.com/paralleldrive/cuid2), rewritten in Go.
+> Secure, collision-resistant ids optimized for horizontal scaling and performance. Next generation UUIDs.
 
-Secure, collision-resistant ids optimized for horizontal scaling and
-performance. Next generation UUIDs.
+This is a port of the JavaScript library [@paralleldrive/cuid2](https://github.com/paralleldrive/cuid2), rewritten in Go.
 
-For more information about Cuid2, including details about why and how, please refer to the original documentation provided
-[here](https://github.com/paralleldrive/cuid2).
+For more information about Cuid2, including details about why and how, please refer to the [original documentation](https://github.com/paralleldrive/cuid2).
 
 ## Getting Started
 
