@@ -170,9 +170,7 @@ func hash(input string) string {
 	hash := sha3.New512()
 	hash.Write([]byte(input))
 	hashDigest := hash.Sum(nil)
-	bigInt := big.Int{}
-	bigInt.SetBytes(hashDigest)
-	return bigInt.Text(36)[1:]
+	return new(big.Int).SetBytes(hashDigest).Text(36)[1:]
 }
 
 func getRandomAlphabet(randomFunc func() float64) string {
