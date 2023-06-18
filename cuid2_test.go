@@ -7,9 +7,16 @@ import (
 
 // External Tests
 func TestIsCuid(t *testing.T) {
-	cuid := Generate()
-	if IsCuid(cuid) == false {
-		t.Error("Expected true, received false")
+	testCases := map[string]bool{
+		Generate():                           true,  // Default
+		Generate() + Generate() + Generate(): false, // Too Long
+		"":                                   false, // Too Short
+	}
+
+	for testCase, expected := range testCases {
+		if IsCuid(testCase) != expected {
+			t.Fatalf("Expected IsCuid(%v) to be %v, but got %v", testCase, expected, !expected)
+		}
 	}
 }
 
@@ -17,8 +24,7 @@ func TestGeneratingInvalidCuid(t *testing.T) {
 	_, err := Init(WithLength(64))
 	if err == nil {
 		t.Fatalf(
-			"Expected to receive an error for generating a Cuid with a length greater than %v, but got nothing",
-			MaxIdLength,
+			"Expected to receive an error for Init(WithLength(64)), but got nothing",
 		)
 	}
 }
