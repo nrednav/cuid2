@@ -81,6 +81,10 @@ func IsCuid(id string) bool {
 // A custom function that will generate a random floating-point value between 0 and 1
 func WithRandomFunc(randomFunc func() float64) Option {
 	return func(c *Config) error {
+		randomness := randomFunc()
+		if randomness < 0 || randomness > 1 {
+			return fmt.Errorf("Error: the provided random function does not generate a value between 0 and 1")
+		}
 		c.randomFunc = randomFunc
 		return nil
 	}
