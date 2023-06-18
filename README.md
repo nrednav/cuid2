@@ -1,0 +1,114 @@
+# Cuid2
+
+> This is a port of the JavaScript library [@paralleldrive/cuid2](https://github.com/paralleldrive/cuid2), rewritten in Go.
+
+Secure, collision-resistant ids optimized for horizontal scaling and
+performance. Next generation UUIDs.
+
+For more information about Cuid2, including details about why and how, please refer to the original documentation provided
+[here](https://github.com/paralleldrive/cuid2).
+
+## Getting Started
+
+With [Go module](https://github.com/golang/go/wiki/Modules) support, you can add the following import statement to your code:
+
+```go
+import "github.com/nrednav/cuid2"
+```
+
+and then run the following in the root of the repository to fetch the module:
+
+```bash
+go mod tidy
+```
+
+Alternatively, you can run the following command:
+
+```bash
+go get -u github.com/nrednav/cuid2
+```
+
+## Usage
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/nrednav/cuid2"
+)
+
+func main() {
+    // Generate a Cuid with default configuration
+    id := cuid2.Generate()
+
+    // or alternatively, provide your own configuration
+    generate, err := cuid2.Init(
+        cuid2.WithLength(32)
+    )
+    if err != nil {
+        fmt.Println(err.Error())
+    }
+
+    // This function generate an id with a length of 32
+    id2 := generate()
+
+    // Validate
+    cuid2.IsCuid(id)
+    cuid2.IsCuid(id2)
+}
+```
+
+## Configuration
+
+You can configure the behavior of the Cuid2 generator by providing the `Init()`
+function a series of option functions.
+
+```go
+package main
+
+import (
+    "math/rand"
+    "github.com/nrednav/cuid2"
+)
+
+func main() {
+    generate, err := cuid2.Init(
+        // Provide a custom function that generates a floating-point value between 0 and 1
+        cuid2.WithRandomFunc(rand.Float64),
+
+        // Adjust the length of generated id, min = 2, max = 32
+        cuid2.WithLength(32),
+
+        // Provide a custom fingerprint that will be used by the id generator to help prevent
+        // collisions when generating id's in a distributed system.
+        cuid2.WithFingerprint("hello world"),
+
+        // Provide a custom function that will be used to start a session
+        // counter which affects the entropy of successive id generation calls
+        cuid2.WithSessionCounter(func() {
+            count := 0
+            return func() {
+                count++
+                return count - 1
+            }
+        })
+    )
+}
+```
+
+## Testing
+
+Run the tests with:
+
+```bash
+go test
+```
+
+As with the original JavaScript library, the collision tests generate over 10
+million ids in parallel across 7 CPU cores. The tests also feature a histogram
+analysis of the entropy range to ensure an even & random distribution.
+
+Here's a sample distribution for one pool of generated ids:
+
+<img width="640" alt="histogram of entropy range" src="assets/histogram.png" />
