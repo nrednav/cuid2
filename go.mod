@@ -1,4 +1,4 @@
-module cuid2
+module github.com/nrednav/cuid2
 
 go 1.20
 
