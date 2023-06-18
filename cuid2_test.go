@@ -100,3 +100,7 @@ func TestCreatingFingerprintWithoutEnvKeyString(t *testing.T) {
 		t.Fatalf("Expected length to be at least %v, but got %v", MinIdLength, len(fingerprint))
 	}
 }
+
+func TestFailure(t *testing.T) {
+	t.Fatalf("Testing pre-push hook")
+}
