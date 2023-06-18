@@ -55,7 +55,7 @@ func Init(options ...Option) (func() string, error) {
 
 	return func() string {
 		firstLetter := getRandomAlphabet(config.randomFunc)
-		time := strconv.FormatInt(time.Now().UnixNano(), 36)
+		time := strconv.FormatInt(time.Now().UnixMilli(), 36)
 		count := strconv.FormatInt(config.sessionCounter(), 36)
 		salt := createEntropy(config.length, config.randomFunc)
 		hashInput := time + salt + count + config.fingerprint
