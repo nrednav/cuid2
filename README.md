@@ -110,3 +110,17 @@ analysis of the entropy range to ensure an even & random distribution.
 Here's a sample distribution for one pool of generated ids:
 
 <img width="640" alt="histogram of entropy range" src="assets/histogram.png" />
+
+## Benchmarks
+
+The id generation function can be benchmarked for varying id lengths.
+
+To run a benchmark, use:
+
+```bash
+go test -run=XYZ -bench=. -benchtime=30s
+```
+
+Results:
+
+<img width="640" alt="benchmarks of id generation" src="assets/benchmark.png" />
