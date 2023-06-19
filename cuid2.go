@@ -101,12 +101,12 @@ func WithSessionCounter(sessionCounter func() int64) Option {
 
 // Configures the length of the generated Cuid
 //
-// Max Length = 32
 // Min Length = 2
+// Max Length = 32
 func WithLength(length int) Option {
 	return func(c *Config) error {
-		if length > MaxIdLength {
-			return fmt.Errorf("Error: Can only generate id's with a max length of %v", length)
+		if length < MinIdLength || length > MaxIdLength {
+			return fmt.Errorf("Error: Can only generate id's with a length between %v and %v", MinIdLength, MaxIdLength)
 		}
 		c.length = length
 		return nil
