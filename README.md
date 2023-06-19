@@ -48,12 +48,11 @@ func main() {
         fmt.Println(err.Error())
     }
 
-    // This function generate an id with a length of 32
-    id2 := generate()
+    // This function generates an id with a length of 32
+    id = generate()
 
     // Validate
     cuid2.IsCuid(id)
-    cuid2.IsCuid(id2)
 }
 ```
 

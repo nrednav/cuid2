@@ -1,4 +1,4 @@
 #!/bin/bash
 
 ## Run tests
-go test ./...
+go test

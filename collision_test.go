@@ -113,9 +113,9 @@ func buildHistogram(numbers []big.Int, bucketCount int) []float64 {
 	buckets := make([]float64, bucketCount)
 	counter := 1
 
-	numerator, _ := big.NewFloat(math.Pow(float64(36), float64(DefaultIdLength-1))).Int(nil)
+	numPermutations, _ := big.NewFloat(math.Pow(float64(36), float64(DefaultIdLength-1))).Int(nil)
 	bucketLength := new(big.Int).Div(
-		numerator,
+		numPermutations,
 		big.NewInt(int64(bucketCount)),
 	)
 

@@ -24,23 +24,32 @@ const (
 )
 
 type Config struct {
-	randomFunc     func() float64
-	sessionCounter func() int64
-	length         int
-	fingerprint    string
+	// A custom function that can generate a floating-point value between 0 and 1
+	RandomFunc func() float64
+
+	// A custom function that will be used to start a session counter which
+	// affects the entropy of successive id generation calls
+	SessionCounter func() int64
+
+	// Length of the generated Cuid, min = 2, max = 32
+	Length int
+
+	// A unique string that will be used by the Cuid generator to help prevent
+	// collisions when generating Cuids in a distributed system.
+	Fingerprint string
 }
 
 type Option func(*Config) error
 
-// Initializes the Cuid2 generator with default or user-defined config options
+// Initializes the Cuid generator with default or user-defined config options
 //
 // Returns a function that can be called to generate Cuids using the initialized config
 func Init(options ...Option) (func() string, error) {
 	config := &Config{
-		randomFunc:     rand.Float64,
-		sessionCounter: createCounter(int64(math.Floor(rand.Float64() * float64(MaxSessionCount)))),
-		length:         DefaultIdLength,
-		fingerprint:    createFingerprint(rand.Float64, getEnvironmentKeyString()),
+		RandomFunc:     rand.Float64,
+		SessionCounter: createCounter(int64(math.Floor(rand.Float64() * float64(MaxSessionCount)))),
+		Length:         DefaultIdLength,
+		Fingerprint:    createFingerprint(rand.Float64, getEnvironmentKeyString()),
 	}
 
 	for _, option := range options {
@@ -52,12 +61,12 @@ func Init(options ...Option) (func() string, error) {
 	}
 
 	return func() string {
-		firstLetter := getRandomAlphabet(config.randomFunc)
+		firstLetter := getRandomAlphabet(config.RandomFunc)
 		time := strconv.FormatInt(time.Now().UnixMilli(), 36)
-		count := strconv.FormatInt(config.sessionCounter(), 36)
-		salt := createEntropy(config.length, config.randomFunc)
-		hashInput := time + salt + count + config.fingerprint
-		hashDigest := firstLetter + hash(hashInput)[1:config.length]
+		count := strconv.FormatInt(config.SessionCounter(), 36)
+		salt := createEntropy(config.Length, config.RandomFunc)
+		hashInput := time + salt + count + config.Fingerprint
+		hashDigest := firstLetter + hash(hashInput)[1:config.Length]
 
 		return hashDigest
 	}, nil
@@ -67,11 +76,11 @@ func Init(options ...Option) (func() string, error) {
 var Generate, _ = Init()
 
 // Checks whether a given Cuid has a valid form and length
-func IsCuid(id string) bool {
-	length := len(id)
-	idMatchesRegex, _ := regexp.MatchString("^[0-9a-z]+$", id)
+func IsCuid(cuid string) bool {
+	length := len(cuid)
+	hasValidForm, _ := regexp.MatchString("^[0-9a-z]+$", cuid)
 
-	if idMatchesRegex && length >= MinIdLength && length <= MaxIdLength {
+	if hasValidForm && length >= MinIdLength && length <= MaxIdLength {
 		return true
 	}
 
@@ -80,12 +89,12 @@ func IsCuid(id string) bool {
 
 // A custom function that will generate a random floating-point value between 0 and 1
 func WithRandomFunc(randomFunc func() float64) Option {
-	return func(c *Config) error {
+	return func(config *Config) error {
 		randomness := randomFunc()
 		if randomness < 0 || randomness > 1 {
 			return fmt.Errorf("Error: the provided random function does not generate a value between 0 and 1")
 		}
-		c.randomFunc = randomFunc
+		config.RandomFunc = randomFunc
 		return nil
 	}
 }
@@ -93,31 +102,30 @@ func WithRandomFunc(randomFunc func() float64) Option {
 // A custom function that will be used to start a session
 // counter which affects the entropy of successive id generation calls
 func WithSessionCounter(sessionCounter func() int64) Option {
-	return func(c *Config) error {
-		c.sessionCounter = sessionCounter
+	return func(config *Config) error {
+		config.SessionCounter = sessionCounter
 		return nil
 	}
 }
 
 // Configures the length of the generated Cuid
 //
-// Min Length = 2
-// Max Length = 32
+// Min Length = 2, Max Length = 32
 func WithLength(length int) Option {
-	return func(c *Config) error {
+	return func(config *Config) error {
 		if length < MinIdLength || length > MaxIdLength {
-			return fmt.Errorf("Error: Can only generate id's with a length between %v and %v", MinIdLength, MaxIdLength)
+			return fmt.Errorf("Error: Can only generate Cuid's with a length between %v and %v", MinIdLength, MaxIdLength)
 		}
-		c.length = length
+		config.Length = length
 		return nil
 	}
 }
 
-// A unique fingerprint that will be used by the id generator to help prevent
-// collisions when generating id's in a distributed system.
+// A unique string that will be used by the id generator to help prevent
+// collisions when generating Cuids in a distributed system.
 func WithFingerprint(fingerprint string) Option {
-	return func(c *Config) error {
-		c.fingerprint = fingerprint
+	return func(config *Config) error {
+		config.Fingerprint = fingerprint
 		return nil
 	}
 }
