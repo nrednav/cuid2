@@ -66,13 +66,13 @@ func TestGeneratingCuidWithMaxLength(t *testing.T) {
 // Internal Tests
 func TestSessionCounter(t *testing.T) {
 	var initialSessionCount int64 = 10
-	sessionCounter := createCounter(initialSessionCount)
-	expectedCounts := []int64{10, 11, 12, 13}
+	sessionCounter := NewSessionCounter(initialSessionCount)
+	expectedCounts := []int64{11, 12, 13, 14}
 	actualCounts := []int64{
-		sessionCounter(),
-		sessionCounter(),
-		sessionCounter(),
-		sessionCounter(),
+		sessionCounter.Increment(),
+		sessionCounter.Increment(),
+		sessionCounter.Increment(),
+		sessionCounter.Increment(),
 	}
 
 	for index, actualCount := range actualCounts {
