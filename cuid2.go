@@ -151,13 +151,6 @@ func WithFingerprint(fingerprint string) Option {
 	}
 }
 
-func createCounter(initialCount int64) func() int64 {
-	return func() int64 {
-		initialCount++
-		return initialCount - 1
-	}
-}
-
 func createFingerprint(randomFunc func() float64, envKeyString string) string {
 	sourceString := createEntropy(MaxIdLength, randomFunc)
 
