@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/sha3"
@@ -27,9 +28,9 @@ type Config struct {
 	// A custom function that can generate a floating-point value between 0 and 1
 	RandomFunc func() float64
 
-	// A custom function that will be used to start a session counter which
-	// affects the entropy of successive id generation calls
-	SessionCounter func() int64
+	// A counter that will be used to affect the entropy of successive id
+	// generation calls
+	SessionCounter Counter
 
 	// Length of the generated Cuid, min = 2, max = 32
 	Length int
@@ -39,15 +40,35 @@ type Config struct {
 	Fingerprint string
 }
 
+type Counter interface {
+	Increment() int64
+}
+
+type SessionCounter struct {
+	value int64
+}
+
+func NewSessionCounter(initialCount int64) *SessionCounter {
+	return &SessionCounter{value: initialCount}
+}
+
+func (sc *SessionCounter) Increment() int64 {
+	return atomic.AddInt64(&sc.value, 1)
+}
+
 type Option func(*Config) error
 
 // Initializes the Cuid generator with default or user-defined config options
 //
 // Returns a function that can be called to generate Cuids using the initialized config
 func Init(options ...Option) (func() string, error) {
+	initialSessionCount := int64(
+		math.Floor(rand.Float64() * float64(MaxSessionCount)),
+	)
+
 	config := &Config{
 		RandomFunc:     rand.Float64,
-		SessionCounter: createCounter(int64(math.Floor(rand.Float64() * float64(MaxSessionCount)))),
+		SessionCounter: NewSessionCounter(initialSessionCount),
 		Length:         DefaultIdLength,
 		Fingerprint:    createFingerprint(rand.Float64, getEnvironmentKeyString()),
 	}
@@ -63,7 +84,7 @@ func Init(options ...Option) (func() string, error) {
 	return func() string {
 		firstLetter := getRandomAlphabet(config.RandomFunc)
 		time := strconv.FormatInt(time.Now().UnixMilli(), 36)
-		count := strconv.FormatInt(config.SessionCounter(), 36)
+		count := strconv.FormatInt(config.SessionCounter.Increment(), 36)
 		salt := createEntropy(config.Length, config.RandomFunc)
 		hashInput := time + salt + count + config.Fingerprint
 		hashDigest := firstLetter + hash(hashInput)[1:config.Length]
@@ -99,9 +120,9 @@ func WithRandomFunc(randomFunc func() float64) Option {
 	}
 }
 
-// A custom function that will be used to start a session
-// counter which affects the entropy of successive id generation calls
-func WithSessionCounter(sessionCounter func() int64) Option {
+// A custom counter that will be used to affect the entropy of successive id
+// generation calls
+func WithSessionCounter(sessionCounter Counter) Option {
 	return func(config *Config) error {
 		config.SessionCounter = sessionCounter
 		return nil
