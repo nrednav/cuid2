@@ -42,7 +42,7 @@ func main() {
 
     // or alternatively, provide your own configuration
     generate, err := cuid2.Init(
-        cuid2.WithLength(32)
+        cuid2.WithLength(32),
     )
     if err != nil {
         fmt.Println(err.Error())
@@ -67,7 +67,21 @@ package main
 import (
     "math/rand"
     "github.com/nrednav/cuid2"
+    "sync/atomic"
 )
+
+// (Optional) create your own custom counter
+type Counter struct {
+    value int64
+}
+
+func NewCounter(initialCount int64) *Counter {
+    return &Counter{value: initialCount}
+}
+
+func (c *Counter) Increment() int64 {
+    return atomic.AddInt64(&sc.value, 1)
+}
 
 func main() {
     generate, err := cuid2.Init(
@@ -81,15 +95,9 @@ func main() {
         // collisions when generating id's in a distributed system.
         cuid2.WithFingerprint("hello world"),
 
-        // Provide a custom function that will be used to start a session
-        // counter which affects the entropy of successive id generation calls
-        cuid2.WithSessionCounter(func() {
-            count := 0
-            return func() {
-                count++
-                return count - 1
-            }
-        })
+        // Provide a custom session counter that will be used to affect the
+        // entropy of successive id generation calls
+        cuid2.WithSessionCounter(NewCounter(0)),
     )
 }
 ```
