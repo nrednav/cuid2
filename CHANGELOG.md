@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed validation of non-CUID strings by `IsCuid()`
   - Added new criteria (starts with a letter) to the validation regex
+- Fixed security alert for `crypto` package
+  - Updated from v0.10.0 to v0.17.0 via Dependabot
 
 ## [v1.0.0] - 2023-09-17
 
