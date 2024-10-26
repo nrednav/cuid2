@@ -11,6 +11,11 @@ func TestIsCuid(t *testing.T) {
 		Generate():                           true,  // Default
 		Generate() + Generate() + Generate(): false, // Too Long
 		"":                                   false, // Too Short
+		"42":                                 false, // Non-CUID
+		"aaaaDLL":                            false, // Capital letters
+		"yi7rqj1trke":                        true,  // Valid
+		"-x!ha":                              false, // Invalid characters
+		"ab*%@#x":                            false, // Invalid characters
 	}
 
 	for testCase, expected := range testCases {

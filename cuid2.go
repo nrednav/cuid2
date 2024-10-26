@@ -99,7 +99,7 @@ var Generate, _ = Init()
 // Checks whether a given Cuid has a valid form and length
 func IsCuid(cuid string) bool {
 	length := len(cuid)
-	hasValidForm, _ := regexp.MatchString("^[0-9a-z]+$", cuid)
+	hasValidForm, _ := regexp.MatchString("^[a-z][0-9a-z]+$", cuid)
 
 	if hasValidForm && length >= MinIdLength && length <= MaxIdLength {
 		return true
