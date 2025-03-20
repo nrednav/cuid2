@@ -1,6 +1,7 @@
 package cuid2
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/big"
@@ -22,6 +23,8 @@ const (
 
 	// ~22k hosts before 50% chance of initial counter collision
 	MaxSessionCount int64 = 476782367
+
+	DefaultBufferSize = 10
 )
 
 type Config struct {
@@ -38,6 +41,19 @@ type Config struct {
 	// A unique string that will be used by the Cuid generator to help prevent
 	// collisions when generating Cuids in a distributed system.
 	Fingerprint string
+
+	// Specific config for using InitChan.
+	Chan ChanConfig
+}
+
+type ChanConfig struct {
+	// Channel’s buffer size, defaults to 10.
+	BufferSize int
+
+	// Context for generating new Cuids, when closed Cuids generation will stop.
+	// Does not close the channel, to prevent a concurrent goroutine
+	// reading from the channel an empty Cuid.
+	Context context.Context
 }
 
 type Counter interface {
@@ -54,6 +70,19 @@ func NewSessionCounter(initialCount int64) *SessionCounter {
 
 func (sc *SessionCounter) Increment() int64 {
 	return atomic.AddInt64(&sc.value, 1)
+}
+
+type UnsafeSessionCounter struct {
+	value int64
+}
+
+func NewUnsafeSessionCounter(initalCount int64) *UnsafeSessionCounter {
+	return &UnsafeSessionCounter{value: initalCount}
+}
+
+func (usc *UnsafeSessionCounter) Increment() int64 {
+	usc.value++
+	return usc.value
 }
 
 type Option func(*Config) error
@@ -91,6 +120,58 @@ func Init(options ...Option) (func() string, error) {
 
 		return hashDigest
 	}, nil
+}
+
+func InitChan(options ...Option) (<-chan string, context.CancelFunc, error) {
+	initialSessionCount := int64(
+		math.Floor(rand.Float64() * float64(MaxSessionCount)),
+	)
+
+	config := &Config{
+		RandomFunc:     rand.Float64,
+		SessionCounter: NewUnsafeSessionCounter(initialSessionCount),
+		Length:         DefaultIdLength,
+		Fingerprint:    createFingerprint(rand.Float64, getEnvironmentKeyString()),
+		Chan: ChanConfig{
+			BufferSize: DefaultBufferSize,
+			Context:    context.Background(),
+		},
+	}
+
+	for _, option := range options {
+		if option != nil {
+			if applyErr := option(config); applyErr != nil {
+				return nil, nil, applyErr
+			}
+		}
+	}
+
+	ctx, cancel := context.WithCancel(config.Chan.Context)
+
+	generator := func() string {
+		firstLetter := getRandomAlphabet(config.RandomFunc)
+		time := strconv.FormatInt(time.Now().UnixMilli(), 36)
+		count := strconv.FormatInt(config.SessionCounter.Increment(), 36)
+		salt := createEntropy(config.Length, config.RandomFunc)
+		hashInput := time + salt + count + config.Fingerprint
+		hashDigest := firstLetter + hash(hashInput)[1:config.Length]
+
+		return hashDigest
+	}
+
+	ch := make(chan string, config.Chan.BufferSize)
+
+	go func() {
+		for {
+			select {
+			case ch <- generator():
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return ch, cancel, nil
 }
 
 // Generates Cuids using default config options
@@ -147,6 +228,29 @@ func WithLength(length int) Option {
 func WithFingerprint(fingerprint string) Option {
 	return func(config *Config) error {
 		config.Fingerprint = fingerprint
+		return nil
+	}
+}
+
+// Configures the channel’s buffer size
+// when generating Cuids from channel using InitChan.
+func WithChanBufferSize(bufferSize int) Option {
+	return func(config *Config) error {
+		config.Chan.BufferSize = bufferSize
+		return nil
+	}
+}
+
+// Configures the Context for generating new Cuids from a channel,
+// defaults to background Context if not given.
+// When the given context is done Cuids generation stops,
+// however the channel is not closed, to prevent a concurrent goroutine
+// reading from the channel an empty Cuid.
+// The given Context is always wrapped in a cancellable Context
+// and the CancelFunc returned from InitChan.
+func WithChanContext(ctx context.Context) Option {
+	return func(config *Config) error {
+		config.Chan.Context = ctx
 		return nil
 	}
 }
