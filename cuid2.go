@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"math/rand"
+	"crypto/rand"
 	"os"
 	"regexp"
 	"strconv"
@@ -72,11 +72,13 @@ func Init(options ...Option) (func() string, error) {
 		math.Floor(rand.Float64() * float64(MaxSessionCount)),
 	)
 
+	defaultRandomFunc := newRandomFunc()
+
 	config := &Config{
-		RandomFunc:     rand.Float64,
+		RandomFunc:     defaultRandomFunc,
 		SessionCounter: NewSessionCounter(initialSessionCount),
 		Length:         DefaultIdLength,
-		Fingerprint:    createFingerprint(rand.Float64, getEnvironmentKeyString()),
+		Fingerprint:    createFingerprint(defaultRandomFunc, getEnvironmentKeyString()),
 	}
 
 	g := &cuidGenerator{
@@ -163,6 +165,29 @@ func WithFingerprint(fingerprint string) Option {
 	return func(config *Config) error {
 		config.Fingerprint = fingerprint
 		return nil
+	}
+}
+
+// Returns a function that provides a cryptographically secure random float64
+// value between 0.0 and 1.0.
+// It panics if the OS's source of entropy is unavailable.
+func newRandomFunc() func() float64 {
+	// max is 2^53 - 1, the largest integer that can be represented exactly by a float64
+	maxInt := new(big.Int).Lsh(big.NewInt(1), 53)
+	maxFloat := new(big.Float).SetInt(maxInt)
+
+	return func() float64 {
+		randomInt, err := rand.Int(rand.Reader, maxInt)
+
+		if err != nil {
+			panic(fmt.Errorf("Error: Failed to read from crypto/rand: %w", err))
+		}
+
+		randomFloat := new(big.Float).setInt(randomInt)
+		randomFloat.Quo(randomFloat, maxFloat)
+		randomFloatValue, _ = randomFloat.Float64()
+
+		return randomFloatValue
 	}
 }
 
