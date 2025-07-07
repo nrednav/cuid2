@@ -222,14 +222,16 @@ func createFingerprint(randomFunc func() float64, envKeyString string) string {
 }
 
 func createEntropy(length int, randomFunc func() float64) string {
-	entropy := ""
+	var builder strings.Builder
 
-	for len(entropy) < length {
+	builder.Grow(length)
+
+	for builder.Len() < length {
 		randomness := int64(math.Floor(randomFunc() * 36))
-		entropy += strconv.FormatInt(randomness, 36)
+		builder.WriteString(strconv.FormatInt(randomness, 36))
 	}
 
-	return entropy
+	return builder.String()[:length]
 }
 
 func getEnvironmentKeyString() string {
