@@ -24,6 +24,9 @@ const (
 
 	// ~22k hosts before 50% chance of initial counter collision
 	MaxSessionCount int64 = 476782367
+
+	Base36 = 36
+	AlphabetSize = 26
 )
 
 type Config struct {
@@ -104,8 +107,8 @@ func Init(options ...Option) (func() string, error) {
 
 func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string {
 	firstLetter := getRandomAlphabet(randomFunc)
-	timeStr := strconv.FormatInt(timeMs, 36)
-	countStr := strconv.FormatInt(g.counter.Increment(), 36)
+	timeStr := strconv.FormatInt(timeMs, Base36)
+	countStr := strconv.FormatInt(g.counter.Increment(), Base36)
 	salt := createEntropy(g.length, randomFunc)
 	hashInput := timeStr + salt + countStr + g.fingerprint
 
@@ -228,8 +231,7 @@ func createEntropy(length int, randomFunc func() float64) string {
 	builder.Grow(length)
 
 	for builder.Len() < length {
-		randomness := int64(math.Floor(randomFunc() * 36))
-		builder.WriteString(strconv.FormatInt(randomness, 36))
+		builder.WriteString(strconv.FormatInt(getRandomInt(randomFunc, Base36), Base36))
 	}
 
 	return builder.String()[:length]
@@ -256,13 +258,17 @@ func hash(input string) string {
 	hash.Write([]byte(input))
 	hashDigest := hash.Sum(nil)
 
-	return new(big.Int).SetBytes(hashDigest).Text(36)[1:]
+	return new(big.Int).SetBytes(hashDigest).Text(Base36)[1:]
 }
 
 func getRandomAlphabet(randomFunc func() float64) string {
 	alphabets := "abcdefghijklmnopqrstuvwxyz"
-	randomIndex := int64(math.Floor(randomFunc() * 26))
-	randomAlphabet := string(alphabets[randomIndex])
 
-	return randomAlphabet
+	return string(alphabets[getRandomInt(randomFunc, AlphabetSize)])
+}
+
+
+// getRandomInt converts a random float64 between 0 and 1 into an integer in the range [0, max-1].
+func getRandomInt(randomFunc func() float64, max int64) int64 {
+	return int64(math.Floor(randomFunc() * float64(max)))
 }
