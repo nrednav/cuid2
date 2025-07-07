@@ -105,3 +105,63 @@ func TestCreatingFingerprintWithoutEnvKeyString(t *testing.T) {
 		t.Fatalf("Expected length to be at least %v, but got %v", MinIdLength, len(fingerprint))
 	}
 }
+
+func TestDeterminismOfGeneration(t *testing.T) {
+	testCases := []struct {
+		name string
+		length int
+		fingerprint string
+		counterStart int64
+		timeMs int64
+		randomFloat float64
+		expectedID string
+		expectedNextID string
+	}{
+		{
+			name: "Short ID with low random value",
+			length: 10,
+			fingerprint: "test-fingerprint",
+			counterStart: 0,
+			timeMs: 1751850060928,
+			randomFloat: 0.1,
+			expectedID: "c79ab4qwd8",
+			expectedNextID: "ctfxvev2em",
+		},
+		{
+			name:          "Long ID with high random value",
+			length:        32,
+			fingerprint:   "fruit-salad",
+			counterStart:  476782360,
+			timeMs:        1751850806018,
+			randomFloat:   0.8,
+			expectedID:    "uhqvhs8l0q5ub01c37pgwfqak5az4l2n",
+			expectedNextID: "u2c7rvhbd6evwn1vj69bye7tj8e7ou2m",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			g := &cuidGenerator {
+				length: testCase.length,
+				counter: NewSessionCounter(testCase.counterStart),
+				fingerprint: testCase.fingerprint,
+			}
+
+			mockRandomFunc := func() float64 {
+				return testCase.randomFloat
+			}
+
+			firstID := g.generate(testCase.timeMs, mockRandomFunc)
+
+			if firstID != testCase.expectedID {
+				t.Errorf("First ID generated did not match expected.\nGot: %s, Expected: %s", firstID, testCase.expectedID)
+			}
+
+			secondID := g.generate(testCase.timeMs, mockRandomFunc)
+
+			if secondID != testCase.expectedNextID {
+				t.Errorf("Second ID generated did not match expected.\nGot: %s, Expected: %s", secondID, testCase.expectedNextID)
+			}
+		})
+	}
+}

@@ -69,11 +69,11 @@ type Option func(*Config) error
 //
 // Returns a function that can be called to generate Cuids using the initialized config
 func Init(options ...Option) (func() string, error) {
-	initialSessionCount := int64(
-		math.Floor(rand.Float64() * float64(MaxSessionCount)),
-	)
-
 	defaultRandomFunc := newRandomFunc()
+
+	initialSessionCount := int64(
+		math.Floor(defaultRandomFunc() * float64(MaxSessionCount)),
+	)
 
 	config := &Config{
 		RandomFunc:     defaultRandomFunc,
@@ -82,18 +82,18 @@ func Init(options ...Option) (func() string, error) {
 		Fingerprint:    createFingerprint(defaultRandomFunc, getEnvironmentKeyString()),
 	}
 
-	g := &cuidGenerator{
-		length: config.Length,
-		counter: config.SessionCounter,
-		fingerprint: config.Fingerprint,
-	}
-
 	for _, option := range options {
 		if option != nil {
 			if applyErr := option(config); applyErr != nil {
 				return func() string { return "" }, applyErr
 			}
 		}
+	}
+
+	g := &cuidGenerator{
+		length: config.Length,
+		counter: config.SessionCounter,
+		fingerprint: config.Fingerprint,
 	}
 
 	return func() string {
@@ -196,9 +196,9 @@ func newRandomFunc() func() float64 {
 			panic(fmt.Errorf("Error: Failed to read from crypto/rand: %w", err))
 		}
 
-		randomFloat := new(big.Float).setInt(randomInt)
+		randomFloat := new(big.Float).SetInt(randomInt)
 		randomFloat.Quo(randomFloat, maxFloat)
-		randomFloatValue, _ = randomFloat.Float64()
+		randomFloatValue, _ := randomFloat.Float64()
 
 		return randomFloatValue
 	}
