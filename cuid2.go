@@ -56,6 +56,12 @@ func (sc *SessionCounter) Increment() int64 {
 	return atomic.AddInt64(&sc.value, 1)
 }
 
+type cuidGenerator struct {
+	length int
+	counter Counter
+	fingerprint string
+}
+
 type Option func(*Config) error
 
 // Initializes the Cuid generator with default or user-defined config options
@@ -73,6 +79,12 @@ func Init(options ...Option) (func() string, error) {
 		Fingerprint:    createFingerprint(rand.Float64, getEnvironmentKeyString()),
 	}
 
+	g := &cuidGenerator{
+		length: config.Length,
+		counter: config.SessionCounter,
+		fingerprint: config.Fingerprint,
+	}
+
 	for _, option := range options {
 		if option != nil {
 			if applyErr := option(config); applyErr != nil {
@@ -82,15 +94,18 @@ func Init(options ...Option) (func() string, error) {
 	}
 
 	return func() string {
-		firstLetter := getRandomAlphabet(config.RandomFunc)
-		time := strconv.FormatInt(time.Now().UnixMilli(), 36)
-		count := strconv.FormatInt(config.SessionCounter.Increment(), 36)
-		salt := createEntropy(config.Length, config.RandomFunc)
-		hashInput := time + salt + count + config.Fingerprint
-		hashDigest := firstLetter + hash(hashInput)[1:config.Length]
-
-		return hashDigest
+		return g.generate(time.Now().UnixMilli(), config.RandomFunc)
 	}, nil
+}
+
+func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string {
+	firstLetter := getRandomAlphabet(randomFunc)
+	timeStr := strconv.FormatInt(timeMs, 36)
+	countStr := strconv.FormatInt(g.counter.Increment(), 36)
+	salt := createEntropy(g.length, randomFunc)
+	hashInput := timeStr + salt + countStr + g.fingerprint
+
+	return firstLetter + hash(hashInput)[1:g.length]
 }
 
 // Generates Cuids using default config options
