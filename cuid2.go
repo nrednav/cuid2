@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/sha3"
@@ -110,8 +111,20 @@ func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string
 	return firstLetter + hash(hashInput)[1:g.length]
 }
 
-// Generates Cuids using default config options
-var Generate, _ = Init()
+var (
+	defaultGenerator func() string
+	initOnce sync.Once
+)
+
+// Generate returns a CUID using the default configuration.
+// The default generator is initialized lazily and safely on the first call.
+func Generate() string {
+	initOnce.Do(func() {
+		defaultGenerator, _ = Init()
+	})
+
+	return defaultGenerator()
+}
 
 // Checks whether a given Cuid has a valid form and length
 func IsCuid(cuid string) bool {
