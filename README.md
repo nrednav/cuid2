@@ -111,9 +111,15 @@ Run the tests with:
 go test
 ```
 
-As with the original JavaScript library, the collision tests generate over 10
-million ids in parallel across 7 CPU cores. The tests also feature a histogram
-analysis of the entropy range to ensure an even & random distribution.
+This project also includes a long-running collision and distribution stress
+test.
+
+This test is excluded by default. To run the stress test, use the `integration`
+build tag:
+
+```bash
+go test -tags=integration -v -timeout=0
+```
 
 Here's a sample distribution for one pool of generated ids:
 
