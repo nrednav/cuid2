@@ -142,10 +142,13 @@ func IsCuid(cuid string) bool {
 func WithRandomFunc(randomFunc func() float64) Option {
 	return func(config *Config) error {
 		randomness := randomFunc()
+
 		if randomness < 0 || randomness > 1 {
 			return fmt.Errorf("Error: the provided random function does not generate a value between 0 and 1")
 		}
+
 		config.RandomFunc = randomFunc
+
 		return nil
 	}
 }
@@ -167,7 +170,9 @@ func WithLength(length int) Option {
 		if length < MinIdLength || length > MaxIdLength {
 			return fmt.Errorf("Error: Can only generate Cuid's with a length between %v and %v", MinIdLength, MaxIdLength)
 		}
+
 		config.Length = length
+
 		return nil
 	}
 }
@@ -245,6 +250,7 @@ func hash(input string) string {
 	hash := sha3.New512()
 	hash.Write([]byte(input))
 	hashDigest := hash.Sum(nil)
+
 	return new(big.Int).SetBytes(hashDigest).Text(36)[1:]
 }
 
@@ -252,5 +258,6 @@ func getRandomAlphabet(randomFunc func() float64) string {
 	alphabets := "abcdefghijklmnopqrstuvwxyz"
 	randomIndex := int64(math.Floor(randomFunc() * 26))
 	randomAlphabet := string(alphabets[randomIndex])
+
 	return randomAlphabet
 }

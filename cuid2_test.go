@@ -1,7 +1,6 @@
 package cuid2
 
 import (
-	"math/rand"
 	"testing"
 )
 
@@ -91,18 +90,24 @@ func TestSessionCounter(t *testing.T) {
 }
 
 func TestCreatingFingerprintWithEnvKeyString(t *testing.T) {
-	fingerprint := createFingerprint(rand.Float64, getEnvironmentKeyString())
-	if len(fingerprint) < MinIdLength {
-		t.Error("Could not generate fingerprint of adequate length")
-		t.Fatalf("Expected length to be at least %v, but got %v", MinIdLength, len(fingerprint))
+	mockRandomFunc := func() float64 { return 0.124816 }
+	mockEnvStr := "KEY1KEY2"
+	expectedFingerprint := "0auhbh4kdn02a87je880p4dyw34ov0y6xm5ics64ezqi9gymln0jhf5goqp74qt977dm2or7mdw8ohgyawyou6ojbhgma1fcb"
+
+	fingerprint := createFingerprint(mockRandomFunc, mockEnvStr)
+
+	if fingerprint != expectedFingerprint {
+		t.Errorf("Fingerprint did not match expected value.\nGot: %s, Expected: %s", fingerprint, expectedFingerprint)
 	}
 }
 
 func TestCreatingFingerprintWithoutEnvKeyString(t *testing.T) {
-	fingerprint := createFingerprint(rand.Float64, "")
-	if len(fingerprint) < MinIdLength {
-		t.Error("Could not generate fingerprint of adequate length")
-		t.Fatalf("Expected length to be at least %v, but got %v", MinIdLength, len(fingerprint))
+	mockRandomFunc := func() float64 { return 0.2481632 }
+	expectedFingerprint := "dzgrtvh0dz0agj9g7wy2ww2mc3g8ddogm550pug0qyvdl91ebq3sowoqzi7jyl35sznv4nne4dqbg4dl5c8yo9vfuf3znvojy"
+	fingerprint := createFingerprint(mockRandomFunc, "")
+
+	if fingerprint != expectedFingerprint {
+		t.Errorf("Fingerprint did not match expected value.\nGot: %s\nExpected: %s", fingerprint, expectedFingerprint)
 	}
 }
 
