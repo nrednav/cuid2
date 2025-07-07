@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"crypto/rand"
 	"os"
+	"sort"
 	"regexp"
 	"strconv"
 	"strings"
@@ -244,6 +245,8 @@ func getEnvironmentKeyString() string {
 		key := variable[:strings.IndexByte(variable, '=')]
 		keys = append(keys, key)
 	}
+
+	sort.Strings(keys)
 
 	return strings.Join(keys, "")
 }
