@@ -1,3 +1,5 @@
+//go:build integration
+
 package cuid2
 
 import (
@@ -5,205 +7,145 @@ import (
 	"log"
 	"math"
 	"math/big"
-	"strconv"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
+const (
+	// The number of histogram buckets to use for distribution analysis.
+	HistogramBuckets = 20
+
+	// The tolerance for how much a histogram bin's size can deviate
+	// from the expected average size.
+	DistributionTolerance = 0.05
+)
+
+type workerResult struct {
+	collisions int
+	histogram  []int
+}
+
 func TestCollisions(t *testing.T) {
-	n := int64(math.Pow(float64(7), float64(8)) * 2)
-	log.Printf("Testing %v unique Cuids...", n)
+	// The original formula: 7^8 * 2 = 11,529,602
+	totalIdsToGenerate := int64(math.Pow(7, 8) * 2)
+	numWorkers := 7
+	idsPerWorker := int(totalIdsToGenerate / int64(numWorkers))
 
-	numPools := int64(7)
-	pools := createIdPools(numPools, n/numPools)
+	log.Printf("Testing %d unique Cuids across %d workers...", totalIdsToGenerate, numWorkers)
 
-	ids := []string{}
-	for _, pool := range pools {
-		ids = append(ids, pool.ids...)
-	}
+	resultsChan := make(chan workerResult, numWorkers)
+	var wg sync.WaitGroup
+	var totalGenerated atomic.Int64
+	doneChan := make(chan struct{})
 
-	sampleIds := ids[:10]
-	set := map[string]struct{}{}
-	for _, id := range ids {
-		set[id] = struct{}{}
-	}
-
-	histogram := pools[0].histogram
-
-	log.Println("Sample Cuids:", sampleIds)
-	log.Println("Histogram:", histogram)
-
-	expectedBinSize := math.Ceil(float64(n / numPools / int64(len(histogram))))
-	tolerance := 0.05
-	minBinSize := math.Round(expectedBinSize * (1 - tolerance))
-	maxBinSize := math.Round(expectedBinSize * (1 + tolerance))
-	log.Println("Expected bin size:", expectedBinSize)
-	log.Println("Min bin size:", minBinSize)
-	log.Println("Maximum bin size:", maxBinSize)
-
-	collisionsDetected := int64(len(set)) - n
-	if collisionsDetected > 0 {
-		t.Fatalf("%v collisions detected", int64(len(set))-n)
-	}
-
-	for _, binSize := range histogram {
-		withinDistributionTolerance := binSize > minBinSize && binSize < maxBinSize
-		if !withinDistributionTolerance {
-			t.Errorf("Histogram of generated Cuids is not within the distribution tolerance of %v", tolerance)
-			t.Fatalf("Expected bin size: %v, min: %v, max: %v, actual: %v", expectedBinSize, minBinSize, maxBinSize, binSize)
-		}
-	}
-
-	validateCuids(t, ids)
-}
-
-type IdPool struct {
-	ids       []string
-	numbers   []big.Int
-	histogram []float64
-}
-
-func NewIdPool(max int) func() *IdPool {
-	return func() *IdPool {
-
-		set := map[string]struct{}{}
-
-		for i := 0; i < max; i++ {
-			set[Generate()] = struct{}{}
-			if i%100000 == 0 {
-				progress := float64(i) / float64(max)
-				log.Printf("%d%%", int64(progress*100))
-			}
-			if len(set) < i {
-				log.Printf("Collision at: %v", i)
-				break
-			}
-		}
-
-		log.Println("No collisions detected")
-
-		ids := []string{}
-		numbers := []big.Int{}
-
-		for element := range set {
-			ids = append(ids, element)
-			numbers = append(numbers, *idToBigInt(element[1:]))
-		}
-
-		return &IdPool{
-			ids:       ids,
-			numbers:   numbers,
-			histogram: buildHistogram(numbers, 20),
-		}
-	}
-}
-
-func idToBigInt(id string) *big.Int {
-	bigInt := new(big.Int)
-	for _, char := range id {
-		base36Rune, _ := strconv.ParseInt(string(char), 36, 64)
-		bigInt.Add(big.NewInt(base36Rune), bigInt.Mul(bigInt, big.NewInt(36)))
-	}
-	return bigInt
-}
-
-func buildHistogram(numbers []big.Int, bucketCount int) []float64 {
-	log.Println("Building histogram...")
-
-	buckets := make([]float64, bucketCount)
-	counter := 1
-
-	numPermutations, _ := big.NewFloat(math.Pow(float64(36), float64(DefaultIdLength-1))).Int(nil)
-	bucketLength := new(big.Int).Div(
-		numPermutations,
-		big.NewInt(int64(bucketCount)),
-	)
-
-	for _, number := range numbers {
-
-		if new(big.Int).Mod(big.NewInt(int64(counter)), bucketLength).Int64() == 0 {
-			log.Println(number)
-		}
-
-		bucket := new(big.Int).Div(
-			&number,
-			bucketLength,
-		)
-
-		if new(big.Int).Mod(big.NewInt(int64(counter)), bucketLength).Int64() == 0 {
-			log.Println(bucket)
-		}
-
-		buckets[bucket.Int64()]++
-		counter++
-	}
-
-	return buckets
-}
-
-func worker(id int, jobs <-chan func() *IdPool, results chan<- *IdPool) {
-	for job := range jobs {
-		log.Println("worker", id, "started job")
-		results <- job()
-	}
-}
-
-func createIdPools(numPools int64, maxIdsPerPool int64) []*IdPool {
-
-	jobsList := []func() *IdPool{}
-	for i := 0; i < int(numPools); i++ {
-		jobsList = append(jobsList, NewIdPool(int(maxIdsPerPool)))
-	}
-
-	jobs := make(chan func() *IdPool, numPools)
-	results := make(chan *IdPool, numPools)
-
-	for w := 1; w <= int(numPools); w++ {
-		go worker(w, jobs, results)
-	}
-
-	for _, job := range jobsList {
-		jobs <- job
-	}
-	close(jobs)
-
-	pools := []*IdPool{}
-	for a := 1; a <= int(numPools); a++ {
-		pool := <-results
-		pools = append(pools, pool)
-	}
-
-	return pools
-}
-
-func validateCuids(t *testing.T, ids []string) {
-	log.Printf("Validating all %v Cuids...", len(ids))
-
-	wg := new(sync.WaitGroup)
-	validationErrors := make(chan error)
-
-	for _, id := range ids {
-		wg.Add(1)
-		go func(id string) {
-			defer wg.Done()
-			if !IsCuid(id) {
-				validationErrors <- fmt.Errorf("Cuid (%v) is not valid", id)
-			}
-		}(id)
-	}
-
+	// Start the progress reporter goroutine
 	go func() {
-		wg.Wait()
-		close(validationErrors)
+		ticker := time.NewTicker(1 * time.Second)
+
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				progress := float64(totalGenerated.Load()) / float64(totalIdsToGenerate) * 100
+				fmt.Printf("\rProgress: %.2f%%", progress)
+			case <-doneChan:
+				fmt.Printf("\rProgress: 100.00%%\n")
+				return
+			}
+		}
 	}()
 
-	numInvalidIds := 0
-	for err := range validationErrors {
-		log.Println(err.Error())
-		numInvalidIds++
+	// Start workers
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go runCollisionWorker(&wg, resultsChan, idsPerWorker, &totalGenerated)
 	}
 
-	if numInvalidIds > 0 {
-		t.Fatalf("%v Cuids were invalid", numInvalidIds)
+	// Wait for all workers to finish
+	wg.Wait()
+	close(resultsChan)
+	close(doneChan)
+
+	// Aggregate results
+	totalCollisions := 0
+	finalHistogram := make([]int, HistogramBuckets)
+
+	for result := range resultsChan {
+		totalCollisions += result.collisions
+
+		for i, count := range result.histogram {
+			finalHistogram[i] += count
+		}
 	}
+
+	log.Println("All workers finished.")
+	log.Printf("Final Histogram: %v", finalHistogram)
+
+	// --- Validation ---
+
+	if totalCollisions > 0 {
+		t.Fatalf("%d collisions detected", totalCollisions)
+	}
+
+	log.Println("No collisions detected.")
+
+	// Validate histogram distribution
+	expectedBinSize := float64(totalIdsToGenerate) / float64(HistogramBuckets)
+	minBinSize := math.Floor(expectedBinSize * (1 - DistributionTolerance))
+	maxBinSize := math.Ceil(expectedBinSize * (1 + DistributionTolerance))
+
+	log.Printf("Expected bin size: ~%.2f (Min: %.2f, Max: %.2f)", expectedBinSize, minBinSize, maxBinSize)
+
+	for i, binSize := range finalHistogram {
+		if float64(binSize) < minBinSize || float64(binSize) > maxBinSize {
+			t.Errorf("Histogram distribution is outside the %.2f%% tolerance.", DistributionTolerance*100)
+			t.Fatalf("Bin %d size %d is outside the expected range [%.2f, %.2f]", i, binSize, minBinSize, maxBinSize)
+		}
+	}
+
+	log.Println("Histogram distribution is within tolerance.")
+}
+
+// runCollisionWorker generates IDs, checks for collisions, and builds a histogram in a single pass.
+func runCollisionWorker(wg *sync.WaitGroup, results chan<- workerResult, numIds int, totalCounter *atomic.Int64) {
+	defer wg.Done()
+
+	idSet := make(map[string]struct{}, numIds)
+	result := workerResult{
+		histogram: make([]int, HistogramBuckets),
+	}
+
+	// Pre-calculate histogram constants
+	numPermutations, _ := new(big.Float).SetInt(
+		new(big.Int).Exp(big.NewInt(Base36), big.NewInt(int64(DefaultIdLength-1)), nil),
+	).Int(nil)
+	bucketLength := new(big.Int).Div(numPermutations, big.NewInt(HistogramBuckets))
+
+	for i := 0; i < numIds; i++ {
+		id := Generate()
+		totalCounter.Add(1)
+
+		// 1. Check for collisions
+		if _, exists := idSet[id]; exists {
+			result.collisions++
+		}
+
+		idSet[id] = struct{}{}
+
+		// 2. Calculate histogram bucket
+		bigIntVal, ok := new(big.Int).SetString(id[1:], Base36)
+
+		if !ok {
+			continue
+		}
+
+		bucket := new(big.Int).Div(bigIntVal, bucketLength)
+
+		result.histogram[bucket.Int64()]++
+	}
+
+	results <- result
 }

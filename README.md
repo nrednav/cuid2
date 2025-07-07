@@ -37,13 +37,14 @@ import (
 )
 
 func main() {
-    // Generate a Cuid with default configuration
+    // Generate a Cuid with default, secure configuration
     id := cuid2.Generate()
 
     // or alternatively, provide your own configuration
     generate, err := cuid2.Init(
         cuid2.WithLength(32),
     )
+
     if err != nil {
         fmt.Println(err.Error())
     }
@@ -65,7 +66,6 @@ function a series of option functions.
 package main
 
 import (
-    "math/rand"
     "github.com/nrednav/cuid2"
     "sync/atomic"
 )
@@ -85,9 +85,6 @@ func (c *Counter) Increment() int64 {
 
 func main() {
     generate, err := cuid2.Init(
-        // Provide a custom function that generates a floating-point value between 0 and 1
-        cuid2.WithRandomFunc(rand.Float64),
-
         // Adjust the length of generated id, min = 2, max = 32
         cuid2.WithLength(32),
 
@@ -98,6 +95,10 @@ func main() {
         // Provide a custom session counter that will be used to affect the
         // entropy of successive id generation calls
         cuid2.WithSessionCounter(NewCounter(0)),
+
+        // Provide a custom function that generates a floating-point value between 0 and 1
+        // This is useful for providing a deterministic source during testing
+        cuid2.WithRandomFunc(func() float64 { return 0.1234 })
     )
 }
 ```
@@ -110,9 +111,15 @@ Run the tests with:
 go test
 ```
 
-As with the original JavaScript library, the collision tests generate over 10
-million ids in parallel across 7 CPU cores. The tests also feature a histogram
-analysis of the entropy range to ensure an even & random distribution.
+This project also includes a long-running collision and distribution stress
+test.
+
+This test is excluded by default. To run the stress test, use the `integration`
+build tag:
+
+```bash
+go test -tags=integration -v -timeout=0
+```
 
 Here's a sample distribution for one pool of generated ids:
 
