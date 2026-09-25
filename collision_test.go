@@ -109,6 +109,38 @@ func TestCollisions(t *testing.T) {
 	log.Println("Histogram distribution is within tolerance.")
 }
 
+var histogramBucketLength = func() *big.Int {
+	numPermutations, _ := new(big.Float).SetInt(
+		new(big.Int).Exp(big.NewInt(Base36), big.NewInt(int64(DefaultIdLength-1)), nil),
+	).Int(nil)
+
+	return new(big.Int).Div(numPermutations, big.NewInt(HistogramBuckets))
+}()
+
+// histogramBucket maps a base36 suffix to a distribution bucket, clamping the
+// top of the range into the last bucket.
+func histogramBucket(value *big.Int) int {
+	index := new(big.Int).Div(value, histogramBucketLength).Int64()
+
+	if index >= HistogramBuckets {
+		return HistogramBuckets - 1
+	}
+
+	return int(index)
+}
+
+func TestHistogramBucketClampsTopOfRange(t *testing.T) {
+	overflow := new(big.Int).Mul(histogramBucketLength, big.NewInt(HistogramBuckets))
+
+	if got := histogramBucket(overflow); got != HistogramBuckets-1 {
+		t.Fatalf("expected an out-of-range value to clamp to %d, got %d", HistogramBuckets-1, got)
+	}
+
+	if got := histogramBucket(big.NewInt(0)); got != 0 {
+		t.Fatalf("expected zero to map to bucket 0, got %d", got)
+	}
+}
+
 // runCollisionWorker generates IDs, checks for collisions, and builds a histogram in a single pass.
 func runCollisionWorker(wg *sync.WaitGroup, results chan<- workerResult, numIds int, totalCounter *atomic.Int64) {
 	defer wg.Done()
@@ -117,12 +149,6 @@ func runCollisionWorker(wg *sync.WaitGroup, results chan<- workerResult, numIds 
 	result := workerResult{
 		histogram: make([]int, HistogramBuckets),
 	}
-
-	// Pre-calculate histogram constants
-	numPermutations, _ := new(big.Float).SetInt(
-		new(big.Int).Exp(big.NewInt(Base36), big.NewInt(int64(DefaultIdLength-1)), nil),
-	).Int(nil)
-	bucketLength := new(big.Int).Div(numPermutations, big.NewInt(HistogramBuckets))
 
 	for i := 0; i < numIds; i++ {
 		id := Generate()
@@ -142,9 +168,7 @@ func runCollisionWorker(wg *sync.WaitGroup, results chan<- workerResult, numIds 
 			continue
 		}
 
-		bucket := new(big.Int).Div(bigIntVal, bucketLength)
-
-		result.histogram[bucket.Int64()]++
+		result.histogram[histogramBucket(bigIntVal)]++
 	}
 
 	results <- result
