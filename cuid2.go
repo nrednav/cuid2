@@ -188,7 +188,12 @@ func WithRandomFunc(randomFunc func() float64) Option {
 // generation calls
 func WithSessionCounter(sessionCounter Counter) Option {
 	return func(config *Config) error {
+		if sessionCounter == nil {
+			return fmt.Errorf("Error: the session counter cannot be nil")
+		}
+
 		config.SessionCounter = sessionCounter
+
 		return nil
 	}
 }
