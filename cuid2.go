@@ -82,7 +82,7 @@ func Init(options ...Option) (func() string, error) {
 	entropy, err := newBatchedSource()
 
 	if err != nil {
-		return func() string { return "" }, err
+		return nil, err
 	}
 
 	initialSessionCount := int64(
@@ -98,7 +98,7 @@ func Init(options ...Option) (func() string, error) {
 	for _, option := range options {
 		if option != nil {
 			if applyErr := option(config); applyErr != nil {
-				return func() string { return "" }, applyErr
+				return nil, applyErr
 			}
 		}
 	}
@@ -137,18 +137,31 @@ func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string
 }
 
 var (
-	defaultGenerator func() string
-	initOnce         sync.Once
+	defaultGenerator atomic.Value // func() string
+	initMu           sync.Mutex
 )
 
 // Generate returns a CUID using the default configuration.
-// The default generator is initialized lazily and safely on the first call.
+// If initialization fails, it fails closed and a later call retries it.
 func Generate() string {
-	initOnce.Do(func() {
-		defaultGenerator, _ = Init()
-	})
+	if g, ok := defaultGenerator.Load().(func() string); ok {
+		return g()
+	}
 
-	return defaultGenerator()
+	initMu.Lock()
+	defer initMu.Unlock()
+
+	if defaultGenerator.Load() == nil {
+		g, err := Init()
+
+		if err != nil {
+			panic(err)
+		}
+
+		defaultGenerator.Store(g)
+	}
+
+	return defaultGenerator.Load().(func() string)()
 }
 
 // Checks whether a given Cuid has a valid form and length
