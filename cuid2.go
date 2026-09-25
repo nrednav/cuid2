@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
 	"os"
@@ -242,7 +243,9 @@ type batchedSource struct {
 func newBatchedSource() (*batchedSource, error) {
 	s := &batchedSource{}
 
-	if _, err := rand.Read(s.buf[:]); err != nil {
+	// rand.Read crashes the program irrecoverably on error (Go 1.24+), so read
+	// the Reader directly to keep the error recoverable and retryable.
+	if _, err := io.ReadFull(rand.Reader, s.buf[:]); err != nil {
 		return nil, fmt.Errorf("Error: Failed to read from crypto/rand: %w", err)
 	}
 
