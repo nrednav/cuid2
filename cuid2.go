@@ -270,14 +270,17 @@ func createEntropy(length int, randomFunc func() float64) string {
 }
 
 func getEnvironmentKeyString() string {
-	env := os.Environ()
+	return getEnvironmentKeyStringFrom(os.Environ())
+}
 
-	keys := []string{}
+func getEnvironmentKeyStringFrom(env []string) string {
+	keys := make([]string, 0, len(env))
 
 	// Discard values of environment variables
 	for _, variable := range env {
-		key := variable[:strings.IndexByte(variable, '=')]
-		keys = append(keys, key)
+		if idx := strings.IndexByte(variable, '='); idx >= 0 {
+			keys = append(keys, variable[:idx])
+		}
 	}
 
 	sort.Strings(keys)
