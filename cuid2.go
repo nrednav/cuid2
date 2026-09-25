@@ -26,8 +26,10 @@ const (
 	// ~22k hosts before 50% chance of initial counter collision
 	MaxSessionCount int64 = 476782367
 
-	Base36       = 36
-	AlphabetSize = 26
+	Base36 = 36
+
+	alphabet     = "abcdefghijklmnopqrstuvwxyz"
+	AlphabetSize = len(alphabet)
 
 	// entropyBatchValues is the worst case: one first letter plus a full-length salt.
 	entropyBatchValues = MaxIdLength + 1
@@ -284,9 +286,7 @@ func hash(input string) string {
 }
 
 func getRandomAlphabet(randomFunc func() float64) string {
-	alphabets := "abcdefghijklmnopqrstuvwxyz"
-
-	return string(alphabets[getRandomInt(randomFunc, AlphabetSize)])
+	return string(alphabet[getRandomInt(randomFunc, int64(AlphabetSize))])
 }
 
 // getRandomInt converts a random float64 between 0 and 1 into an integer in the range [0, max-1].
