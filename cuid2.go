@@ -152,15 +152,12 @@ func Generate() string {
 }
 
 // Checks whether a given Cuid has a valid form and length
+var cuidRegex = regexp.MustCompile("^[a-z][0-9a-z]+$")
+
 func IsCuid(cuid string) bool {
 	length := len(cuid)
-	hasValidForm, _ := regexp.MatchString("^[a-z][0-9a-z]+$", cuid)
 
-	if hasValidForm && length >= MinIdLength && length <= MaxIdLength {
-		return true
-	}
-
-	return false
+	return cuidRegex.MatchString(cuid) && length >= MinIdLength && length <= MaxIdLength
 }
 
 // A custom function that will generate a random floating-point value between 0 and 1
