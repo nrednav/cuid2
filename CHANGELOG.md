@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.1] - 2026-09-25
+
+### Added
+
+- Hardening tests for the random-function contract, lazy initialization,
+  entropy-read count, environment parsing, and the collision histogram bound
+- A test that `IsCuid` allocates nothing, guarding the precompiled pattern, and
+  documentation-invariant tests that catch drift in the documented bounds
+- A GitHub Actions CI workflow that checks formatting, vets, runs the
+  race-enabled tests, and runs the integration collision suite on Go 1.23 and
+  1.24, with actions pinned by commit
+- A pre-commit hook that lints workflows with `actionlint`, and Dependabot
+  configuration for weekly GitHub Actions and Go module updates
+
+### Changed
+
+- Clarity
+  - The `RandomFunc` option and `WithRandomFunc` now document the `[0, 1)`
+    contract instead of "between 0 and 1"
+  - `Generate` initializes the default generator through a single idiom
+- Security
+  - `WithRandomFunc` rejects NaN and any value outside `[0, 1)` at
+    configuration time and validates every subsequent call, failing closed
+    instead of silently collapsing or crashing
+  - `Init` now returns a nil generator on error, instead of a closure that
+    yields an empty string
+  - A transient entropy failure during lazy initialization is retried on the
+    next `Generate()` call instead of permanently disabling the generator
+- Performance
+  - The default random source reads all required entropy in a single read of
+    `crypto/rand.Reader` per id, replacing per-value `big.Int` and `big.Float`
+    allocations
+  - `IsCuid` uses a precompiled regular expression instead of recompiling on
+    every call
+- Parity
+  - The fingerprint is truncated to 32 characters, matching the JavaScript
+    reference
+- Documentation
+  - Documented the counter's `int64` wrap bound, that ordering is approximate
+    because it uses the wall clock, and the mapping from the JavaScript
+    `getConstants()` values to the Go constants
+
+### Fixed
+
+- `getEnvironmentKeyString` no longer panics on an environment entry without
+  an `=` separator
+- `WithSessionCounter` rejects a nil counter at configuration time, instead of
+  panicking during generation
+- The collision-test histogram clamps the top of the range into the last bin
+- `AlphabetSize` no longer duplicates the alphabet length; a compile-time
+  guard keeps the two in sync
+- The README custom-counter example now compiles
+
 ## [v1.1.0] - 2025-07-07
 
 ### Added

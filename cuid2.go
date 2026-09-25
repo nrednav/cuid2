@@ -1,17 +1,19 @@
 package cuid2
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"math/big"
-	"crypto/rand"
 	"os"
-	"sort"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/crypto/sha3"
@@ -26,11 +28,22 @@ const (
 	MaxSessionCount int64 = 476782367
 
 	Base36 = 36
-	AlphabetSize = 26
+
+	alphabet     = "abcdefghijklmnopqrstuvwxyz"
+	AlphabetSize = 26 // must equal len(alphabet)
+
+	// entropyBatchValues is the worst case: one first letter plus a full-length salt.
+	entropyBatchValues = MaxIdLength + 1
+)
+
+// AlphabetSize must equal the alphabet length; these fail to build if they drift.
+var (
+	_ [AlphabetSize - len(alphabet)]struct{}
+	_ [len(alphabet) - AlphabetSize]struct{}
 )
 
 type Config struct {
-	// A custom function that can generate a floating-point value between 0 and 1
+	// A custom function that can generate a floating-point value in [0, 1)
 	RandomFunc func() float64
 
 	// A counter that will be used to affect the entropy of successive id
@@ -57,13 +70,16 @@ func NewSessionCounter(initialCount int64) *SessionCounter {
 	return &SessionCounter{value: initialCount}
 }
 
+// Increment returns the next counter value. The int64 addition wraps at the
+// boundary, so after 2^63 increments the counter repeats its contribution; the
+// per-call salt still carries collision resistance.
 func (sc *SessionCounter) Increment() int64 {
 	return atomic.AddInt64(&sc.value, 1)
 }
 
 type cuidGenerator struct {
-	length int
-	counter Counter
+	length      int
+	counter     Counter
 	fingerprint string
 }
 
@@ -73,38 +89,55 @@ type Option func(*Config) error
 //
 // Returns a function that can be called to generate Cuids using the initialized config
 func Init(options ...Option) (func() string, error) {
-	defaultRandomFunc := newRandomFunc()
+	entropy, err := newBatchedSource()
+
+	if err != nil {
+		return nil, err
+	}
 
 	initialSessionCount := int64(
-		math.Floor(defaultRandomFunc() * float64(MaxSessionCount)),
+		math.Floor(entropy.Float64() * float64(MaxSessionCount)),
 	)
 
 	config := &Config{
-		RandomFunc:     defaultRandomFunc,
 		SessionCounter: NewSessionCounter(initialSessionCount),
 		Length:         DefaultIdLength,
-		Fingerprint:    createFingerprint(defaultRandomFunc, getEnvironmentKeyString()),
+		Fingerprint:    createFingerprint(entropy.Float64, getEnvironmentKeyString()),
 	}
 
 	for _, option := range options {
 		if option != nil {
 			if applyErr := option(config); applyErr != nil {
-				return func() string { return "" }, applyErr
+				return nil, applyErr
 			}
 		}
 	}
 
 	g := &cuidGenerator{
-		length: config.Length,
-		counter: config.SessionCounter,
+		length:      config.Length,
+		counter:     config.SessionCounter,
 		fingerprint: config.Fingerprint,
 	}
 
 	return func() string {
-		return g.generate(time.Now().UnixMilli(), config.RandomFunc)
+		randomFunc := config.RandomFunc
+
+		if randomFunc == nil {
+			source, err := newBatchedSource()
+
+			if err != nil {
+				panic(err)
+			}
+
+			randomFunc = source.Float64
+		}
+
+		return g.generate(time.Now().UnixMilli(), randomFunc)
 	}, nil
 }
 
+// generate builds one id. The embedded timestamp only approximates creation
+// order: the wall clock can step backward, so ids are not strictly increasing.
 func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string {
 	firstLetter := getRandomAlphabet(randomFunc)
 	timeStr := strconv.FormatInt(timeMs, Base36)
@@ -112,46 +145,64 @@ func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string
 	salt := createEntropy(g.length, randomFunc)
 	hashInput := timeStr + salt + countStr + g.fingerprint
 
+	// SHA3-512 base36 is longer than MaxIdLength, so the slice is in range for
+	// every supported length.
 	return firstLetter + hash(hashInput)[1:g.length]
 }
 
 var (
-	defaultGenerator func() string
-	initOnce sync.Once
+	defaultGenerator atomic.Value // func() string
+	initMu           sync.Mutex
 )
 
 // Generate returns a CUID using the default configuration.
-// The default generator is initialized lazily and safely on the first call.
+// If initialization fails, it fails closed and a later call retries it.
 func Generate() string {
-	initOnce.Do(func() {
-		defaultGenerator, _ = Init()
-	})
+	if g := defaultGenerator.Load(); g != nil {
+		return g.(func() string)()
+	}
 
-	return defaultGenerator()
+	initMu.Lock()
+	defer initMu.Unlock()
+
+	if defaultGenerator.Load() == nil {
+		g, err := Init()
+
+		if err != nil {
+			panic(err)
+		}
+
+		defaultGenerator.Store(g)
+	}
+
+	return defaultGenerator.Load().(func() string)()
 }
 
 // Checks whether a given Cuid has a valid form and length
+var cuidRegex = regexp.MustCompile("^[a-z][0-9a-z]+$")
+
 func IsCuid(cuid string) bool {
 	length := len(cuid)
-	hasValidForm, _ := regexp.MatchString("^[a-z][0-9a-z]+$", cuid)
 
-	if hasValidForm && length >= MinIdLength && length <= MaxIdLength {
-		return true
-	}
-
-	return false
+	return cuidRegex.MatchString(cuid) && length >= MinIdLength && length <= MaxIdLength
 }
 
-// A custom function that will generate a random floating-point value between 0 and 1
+// A custom function that will generate a random floating-point value in [0, 1)
 func WithRandomFunc(randomFunc func() float64) Option {
 	return func(config *Config) error {
-		randomness := randomFunc()
-
-		if randomness < 0 || randomness > 1 {
-			return fmt.Errorf("Error: the provided random function does not generate a value between 0 and 1")
+		if r := randomFunc(); math.IsNaN(r) || r < 0 || r >= 1 {
+			return fmt.Errorf("Error: the provided random function does not generate a value between 0 (inclusive) and 1 (exclusive)")
 		}
 
-		config.RandomFunc = randomFunc
+		config.RandomFunc = func() float64 {
+			v := randomFunc()
+
+			if math.IsNaN(v) || v < 0 || v >= 1 {
+				panic("Error: the provided random function returned a value outside the range [0, 1)")
+			}
+
+			return v
+		}
 
 		return nil
 	}
@@ -161,7 +212,12 @@ func WithRandomFunc(randomFunc func() float64) Option {
 // generation calls
 func WithSessionCounter(sessionCounter Counter) Option {
 	return func(config *Config) error {
+		if sessionCounter == nil {
+			return fmt.Errorf("Error: the session counter cannot be nil")
+		}
+
 		config.SessionCounter = sessionCounter
+
 		return nil
 	}
 }
@@ -190,27 +246,32 @@ func WithFingerprint(fingerprint string) Option {
 	}
 }
 
-// Returns a function that provides a cryptographically secure random float64
-// value between 0.0 and 1.0.
-// It panics if the OS's source of entropy is unavailable.
-func newRandomFunc() func() float64 {
-	// max is 2^53 - 1, the largest integer that can be represented exactly by a float64
-	maxInt := new(big.Int).Lsh(big.NewInt(1), 53)
-	maxFloat := new(big.Float).SetInt(maxInt)
+// batchedSource yields uniform float64 values in [0, 1) from a single read of
+// the OS entropy source.
+type batchedSource struct {
+	buf [entropyBatchValues * 8]byte
+	off int
+}
 
-	return func() float64 {
-		randomInt, err := rand.Int(rand.Reader, maxInt)
+func newBatchedSource() (*batchedSource, error) {
+	s := &batchedSource{}
 
-		if err != nil {
-			panic(fmt.Errorf("Error: Failed to read from crypto/rand: %w", err))
-		}
-
-		randomFloat := new(big.Float).SetInt(randomInt)
-		randomFloat.Quo(randomFloat, maxFloat)
-		randomFloatValue, _ := randomFloat.Float64()
-
-		return randomFloatValue
+	// rand.Read crashes the program irrecoverably on error (Go 1.24+), so read
+	// the Reader directly to keep the error recoverable and retryable.
+	if _, err := io.ReadFull(rand.Reader, s.buf[:]); err != nil {
+		return nil, fmt.Errorf("Error: Failed to read from crypto/rand: %w", err)
 	}
+
+	return s, nil
+}
+
+// Float64 returns the next value. The top 53 bits of each 64-bit window are
+// used, matching the precision of the previous 2^53 division.
+func (s *batchedSource) Float64() float64 {
+	v := binary.BigEndian.Uint64(s.buf[s.off : s.off+8])
+	s.off += 8
+
+	return float64(v>>11) / float64(1<<53)
 }
 
 func createFingerprint(randomFunc func() float64, envKeyString string) string {
@@ -220,9 +281,7 @@ func createFingerprint(randomFunc func() float64, envKeyString string) string {
 		sourceString += envKeyString
 	}
 
-	sourceStringHash := hash(sourceString)
-
-	return sourceStringHash[1:]
+	return hash(sourceString)[:MaxIdLength]
 }
 
 func createEntropy(length int, randomFunc func() float64) string {
@@ -238,14 +297,17 @@ func createEntropy(length int, randomFunc func() float64) string {
 }
 
 func getEnvironmentKeyString() string {
-	env := os.Environ()
+	return getEnvironmentKeyStringFrom(os.Environ())
+}
 
-	keys := []string{}
+func getEnvironmentKeyStringFrom(env []string) string {
+	keys := make([]string, 0, len(env))
 
 	// Discard values of environment variables
 	for _, variable := range env {
-		key := variable[:strings.IndexByte(variable, '=')]
-		keys = append(keys, key)
+		if idx := strings.IndexByte(variable, '='); idx >= 0 {
+			keys = append(keys, variable[:idx])
+		}
 	}
 
 	sort.Strings(keys)
@@ -262,11 +324,8 @@ func hash(input string) string {
 }
 
 func getRandomAlphabet(randomFunc func() float64) string {
-	alphabets := "abcdefghijklmnopqrstuvwxyz"
-
-	return string(alphabets[getRandomInt(randomFunc, AlphabetSize)])
+	return string(alphabet[getRandomInt(randomFunc, int64(AlphabetSize))])
 }
-
 
 // getRandomInt converts a random float64 between 0 and 1 into an integer in the range [0, max-1].
 func getRandomInt(randomFunc func() float64, max int64) int64 {
