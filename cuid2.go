@@ -37,7 +37,7 @@ const (
 )
 
 type Config struct {
-	// A custom function that can generate a floating-point value between 0 and 1
+	// A custom function that can generate a floating-point value in [0, 1)
 	RandomFunc func() float64
 
 	// A counter that will be used to affect the entropy of successive id
@@ -152,8 +152,8 @@ var (
 // Generate returns a CUID using the default configuration.
 // If initialization fails, it fails closed and a later call retries it.
 func Generate() string {
-	if g, ok := defaultGenerator.Load().(func() string); ok {
-		return g()
+	if g := defaultGenerator.Load(); g != nil {
+		return g.(func() string)()
 	}
 
 	initMu.Lock()
@@ -181,7 +181,7 @@ func IsCuid(cuid string) bool {
 	return cuidRegex.MatchString(cuid) && length >= MinIdLength && length <= MaxIdLength
 }
 
-// A custom function that will generate a random floating-point value between 0 and 1
+// A custom function that will generate a random floating-point value in [0, 1)
 func WithRandomFunc(randomFunc func() float64) Option {
 	return func(config *Config) error {
 		if r := randomFunc(); math.IsNaN(r) || r < 0 || r >= 1 {
