@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.1] - 2026-09-25
+
+### Added
+
+- Hardening tests for the random-function contract, lazy initialization,
+  entropy-read count, environment parsing, and the collision histogram bound
+
+### Changed
+
+- Security
+  - `WithRandomFunc` rejects NaN and any value outside `[0, 1)` at
+    configuration time and validates every subsequent call, failing closed
+    instead of silently collapsing or crashing
+  - `Init` now returns a nil generator on error, instead of a closure that
+    yields an empty string
+  - A transient entropy failure during lazy initialization is retried on the
+    next `Generate()` call instead of permanently disabling the generator
+- Performance
+  - The default random source reads all required entropy in a single
+    `crypto/rand` read per id, replacing per-value `big.Int` and `big.Float`
+    allocations
+  - `IsCuid` uses a precompiled regular expression instead of recompiling on
+    every call
+- Parity
+  - The fingerprint is truncated to 32 characters, matching the JavaScript
+    reference
+
+### Fixed
+
+- `getEnvironmentKeyString` no longer panics on an environment entry without
+  an `=` separator
+- The collision-test histogram clamps the top of the range into the last bin
+- `AlphabetSize` is derived from a single alphabet definition
+- The README custom-counter example now compiles
+
 ## [v1.1.0] - 2025-07-07
 
 ### Added
