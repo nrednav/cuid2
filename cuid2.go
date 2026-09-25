@@ -166,13 +166,19 @@ func IsCuid(cuid string) bool {
 // A custom function that will generate a random floating-point value between 0 and 1
 func WithRandomFunc(randomFunc func() float64) Option {
 	return func(config *Config) error {
-		randomness := randomFunc()
-
-		if randomness < 0 || randomness > 1 {
-			return fmt.Errorf("Error: the provided random function does not generate a value between 0 and 1")
+		if r := randomFunc(); math.IsNaN(r) || r < 0 || r >= 1 {
+			return fmt.Errorf("Error: the provided random function does not generate a value between 0 (inclusive) and 1 (exclusive)")
 		}
 
-		config.RandomFunc = randomFunc
+		config.RandomFunc = func() float64 {
+			v := randomFunc()
+
+			if math.IsNaN(v) || v < 0 || v >= 1 {
+				panic("Error: the provided random function returned a value outside the range [0, 1)")
+			}
+
+			return v
+		}
 
 		return nil
 	}
