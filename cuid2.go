@@ -30,10 +30,16 @@ const (
 	Base36 = 36
 
 	alphabet     = "abcdefghijklmnopqrstuvwxyz"
-	AlphabetSize = len(alphabet)
+	AlphabetSize = 26 // must equal len(alphabet)
 
 	// entropyBatchValues is the worst case: one first letter plus a full-length salt.
 	entropyBatchValues = MaxIdLength + 1
+)
+
+// AlphabetSize must equal the alphabet length; these fail to build if they drift.
+var (
+	_ [AlphabetSize - len(alphabet)]struct{}
+	_ [len(alphabet) - AlphabetSize]struct{}
 )
 
 type Config struct {

@@ -54,7 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `WithSessionCounter` rejects a nil counter at configuration time, instead of
   panicking during generation
 - The collision-test histogram clamps the top of the range into the last bin
-- `AlphabetSize` is derived from a single alphabet definition
+- `AlphabetSize` no longer duplicates the alphabet length; a compile-time
+  guard keeps the two in sync
 - The README custom-counter example now compiles
 
 ## [v1.1.0] - 2025-07-07
