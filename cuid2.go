@@ -64,6 +64,9 @@ func NewSessionCounter(initialCount int64) *SessionCounter {
 	return &SessionCounter{value: initialCount}
 }
 
+// Increment returns the next counter value. The int64 addition wraps at the
+// boundary, so after 2^63 increments the counter repeats its contribution; the
+// per-call salt still carries collision resistance.
 func (sc *SessionCounter) Increment() int64 {
 	return atomic.AddInt64(&sc.value, 1)
 }
@@ -127,6 +130,8 @@ func Init(options ...Option) (func() string, error) {
 	}, nil
 }
 
+// generate builds one id. The embedded timestamp only approximates creation
+// order: the wall clock can step backward, so ids are not strictly increasing.
 func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string {
 	firstLetter := getRandomAlphabet(randomFunc)
 	timeStr := strconv.FormatInt(timeMs, Base36)
@@ -134,6 +139,8 @@ func (g *cuidGenerator) generate(timeMs int64, randomFunc func() float64) string
 	salt := createEntropy(g.length, randomFunc)
 	hashInput := timeStr + salt + countStr + g.fingerprint
 
+	// SHA3-512 base36 is longer than MaxIdLength, so the slice is in range for
+	// every supported length.
 	return firstLetter + hash(hashInput)[1:g.length]
 }
 

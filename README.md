@@ -80,7 +80,7 @@ func NewCounter(initialCount int64) *Counter {
 }
 
 func (c *Counter) Increment() int64 {
-    return atomic.AddInt64(&sc.value, 1)
+    return atomic.AddInt64(&c.value, 1)
 }
 
 func main() {
@@ -102,6 +102,23 @@ func main() {
     )
 }
 ```
+
+## Constants
+
+The JavaScript reference exposes `getConstants()` returning
+`{ defaultLength, bigLength }`. The Go port exposes the same values as
+package-level constants:
+
+| JavaScript `getConstants()` | Go constant |
+| --------------------------- | ----------- |
+| `defaultLength` | `cuid2.DefaultIdLength` |
+| `bigLength` | `cuid2.MaxIdLength` |
+
+## Ordering
+
+Generated ids embed a wall-clock timestamp, so they are only approximately
+ordered by creation time. A wall-clock adjustment, such as an NTP step, can make
+a later id sort before an earlier one. This matches the JavaScript reference.
 
 ## Testing
 
