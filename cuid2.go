@@ -265,9 +265,7 @@ func createFingerprint(randomFunc func() float64, envKeyString string) string {
 		sourceString += envKeyString
 	}
 
-	sourceStringHash := hash(sourceString)
-
-	return sourceStringHash[1:]
+	return hash(sourceString)[:MaxIdLength]
 }
 
 func createEntropy(length int, randomFunc func() float64) string {
