@@ -175,3 +175,13 @@ func TestAlphabetSizeMatchesAlphabet(t *testing.T) {
 		t.Fatalf("AlphabetSize %d does not match the alphabet length %d", AlphabetSize, len(alphabet))
 	}
 }
+
+func TestIsCuidDoesNotCompilePerCall(t *testing.T) {
+	allocs := testing.AllocsPerRun(1000, func() {
+		IsCuid("yi7rqj1trke")
+	})
+
+	if allocs > 0 {
+		t.Fatalf("expected IsCuid to allocate nothing with a precompiled pattern, got %v allocations per call", allocs)
+	}
+}
